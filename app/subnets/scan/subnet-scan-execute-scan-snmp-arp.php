@@ -47,7 +47,7 @@ if ($devices_used !== false) {
         // get possible sections
         $permitted_sections = explode(";", $d->sections);
         // check
-        if (in_array($subnet->sectionId, $permitted_sections)) {
+		if (in_array($subnet->sectionId, $permitted_sections) && (explode(".",$d->ip_addr)[1] == explode(".",$subnet->ip)[1])) {
             $permitted_devices[] = $d;
         }
     }
@@ -75,10 +75,10 @@ foreach ($permitted_devices as $d) {
                elseif (in_array($r['ip'], $subnet_ip_addresses)) { }
                // save
                else {
-                   $found[$d->id][] = $r;
-               }
-           }
-        }
+                       $found[$d->id][] = $r;
+                   }
+	           }
+		   }
         // get interfaces
         $res = $Snmp->get_query("get_interfaces_ip");
         // remove those not in subnet
@@ -101,6 +101,21 @@ foreach ($permitted_devices as $d) {
        // save for debug
        $debug[$d->hostname]['get_arp_table'] = $res;
        $errors[] = $e->getMessage();
+	}
+}
+
+#delete duplicates
+$indx = 0;
+$repeated = [];
+foreach($found as $f){
+	foreach($f as $r){
+		$tmpip = $r['ip'];
+		if(in_array($r['ip'],$repeated)){
+			unset($found[$d->id][$indx]);
+		}else {
+			array_push($repeated,$r['ip']);
+		}
+		$indx ++;
 	}
 }
 

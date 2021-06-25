@@ -40,6 +40,9 @@ foreach ($devices_used as $d) {
 // if none set die
 if ($devices_used===false)                      { $Result->show("danger", "No devices for SNMP route table query available"."!", true, $ajax_loaded); }
 
+$subnet = $Subnets->fetch_subnet ("id", $_POST['subnetId']);
+
+
 // ok, we have devices, connect to each device and do query
 foreach ($devices_used as $d) {
     // init
@@ -48,7 +51,7 @@ foreach ($devices_used as $d) {
     try {
        $res = $Snmp->get_query("get_routing_table");
        // remove those not in subnet
-       if (sizeof($res)>0) {
+       if (sizeof($res)>0 && (explode(".",$d->ip_addr)[1] == explode(".",$subnet->ip)[1])) {
            // save for debug
            $debug[$d->hostname][$q] = $res;
 

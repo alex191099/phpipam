@@ -43,7 +43,7 @@ if (sizeof($all_subnet_hosts)>0) {
             // get possible sections
             $permitted_sections = explode(";", $d->sections);
             // check
-            if (in_array($subnet->sectionId, $permitted_sections)) {
+            if (in_array($subnet->sectionId, $permitted_sections) && (explode(".",$d->ip_addr)[1] == explode(".",$subnet->ip)[1])) {
                 $permitted_devices[] = $d;
             }
         }
@@ -58,25 +58,27 @@ if (sizeof($all_subnet_hosts)>0) {
         $Snmp->set_snmp_device ($d);
         // execute
         try {
-           $res = $Snmp->get_query("get_arp_table");
-           // remove those not in subnet
-           if (is_array($res) && sizeof($res)>0) {
-               // save for debug
-               $debug[$d->hostname]["get_arp_table"] = $res;
-               // check
-               foreach ($res as $kr=>$r) {
-                   if ($Subnets->is_subnet_inside_subnet ($r['ip']."/32", $Subnets->transform_address($subnet->subnet, "dotted")."/".$subnet->mask)===true) {
-                       // must be existing
-                       if (array_key_exists($Subnets->transform_address($r['ip'], "decimal"), $result)) {
-                           // add to alive
-                           $result[$Subnets->transform_address($r['ip'], "decimal")]['code'] = 0;
-                           $result[$Subnets->transform_address($r['ip'], "decimal")]['status'] = "Online";
-                           // update alive time
-                           @$Scan->ping_update_lastseen($result[$Subnets->transform_address($r['ip'], "decimal")]['id']);
-                       }
-                   }
-               }
-           }
+            $res = $Snmp->get_query("get_arp_table");
+            // remove those not in subnet
+            if (is_array($res) && sizeof($res)>0) {
+                // save for debug
+                $debug[$d->hostname]["get_arp_table"] = $res;
+                // check
+				foreach($res as $kr){
+					foreach ($kr as $r) {
+						if ($Subnets->is_subnet_inside_subnet ($r['ip']."/32", $Subnets->transform_address($subnet->subnet, "dotted")."/".$subnet->mask)===true) {
+							// must be existing
+							if (array_key_exists($Subnets->transform_address($r['ip'], "decimal"), $result)) {
+								// add to alive
+								$result[$Subnets->transform_address($r['ip'], "decimal")]['code'] = 0;
+								$result[$Subnets->transform_address($r['ip'], "decimal")]['status'] = "Online";
+								// update alive time
+								@$Scan->ping_update_lastseen($result[$Subnets->transform_address($r['ip'], "decimal")]['id']);
+							}
+						}
+					}
+				}
+			}
            $found[$d->id] = $res;
 
          } catch (Exception $e) {

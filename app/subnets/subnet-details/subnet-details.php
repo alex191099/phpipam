@@ -236,6 +236,9 @@ else {
 					print ' ('.$device->description.')';
 				}
 				print $rack_text;
+				
+				//saving ipaddr for later subnet scan
+				$_SESSION['device'] = $device->ip_addr;
 			}
 			else {
 				print "<span class='text-muted'>/</span>";
