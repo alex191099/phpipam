@@ -46,7 +46,13 @@ class OpenStreetMap extends Common_functions {
      */
     private $polydata = [];
 
-
+    /**
+     * Used for decoding the hash from base32
+     *
+     * @var string
+     */
+    protected $base32Mapping = "0123456789bcdefghjkmnpqrstuvwxyz";
+	
     /**
      * Constructor
      *
@@ -186,8 +192,39 @@ class OpenStreetMap extends Common_functions {
         }
 
         ?>
+		<style>
+			::-webkit-scrollbar {
+		width: 10px;
+		margin-left: 40px;
+		}
+
+		/* Track */
+		::-webkit-scrollbar-track {
+		background: #f7f7f7; 
+		border-radius: 30px;
+		}
+		
+		/* Handle */
+		::-webkit-scrollbar-thumb {
+		background: #d8d8d8; 
+		border-radius: 30px;
+		}
+
+		/* Handle on hover */
+		::-webkit-scrollbar-thumb:hover {
+		background: #b9b9b9; 
+		}
+		.custom-scrollbar{
+			overflow-y: hidden;
+			
+		}
+		.custom-scrollbar:hover{
+			overflow-y: scroll;
+		}
+		</style>
         <div style="width:100%; height:<?php print isset($height) ? $height : "600px" ?>;" id="map_overlay">
-            <div id="osmap" style="width:100%; height:100%;"></div>
+            <div id="map" style="width:100%; height:100%;"></div>
+			<div id="osmapData"> </div>
         </div>
         <script>
             function osm_style(feature) {
@@ -211,8 +248,9 @@ class OpenStreetMap extends Common_functions {
                 });
             }
 
-            var geodata  = <?php print json_encode($this->geodata); ?>;
-            var polydata = <?php print json_encode($this->polydata); ?>;
+            var geodata   = <?php print json_encode($this->geodata); ?>;
+			var geopoints = <?php print json_encode($this->geodata); ?>;
+            var polydata  = <?php print json_encode($this->polydata); ?>;
 
             var mapOptions = {
                 preferCanvas: true,
@@ -222,6 +260,7 @@ class OpenStreetMap extends Common_functions {
             }
 
             var geoJSONOptions = {
+				maxZoom: 23,
                 style: osm_style,
                 onEachFeature: osm_onEachFeature,
                 pointToLayer: osm_point_to_circle,
@@ -230,9 +269,28 @@ class OpenStreetMap extends Common_functions {
             var layerOptions = {
                 attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             }
-
+			<?php 
+				$dir = './app/tools/locations/';
+				$ficheros = scandir($dir);
+				$folders = [];
+				foreach($ficheros as $item){
+					if(is_dir($dir . '/' . $item) && $item != '.' && $item != '..'){
+						array_push($folders, $item);
+					}
+				}
+			?>
+			var folders = <?php echo json_encode($folders); ?>;
+			
+			var ZOOMLEVELS = {1: 4, 14: 4, 15 : 5, 16 : 6, 17 : 7, 18 : 9, 19 : 10, 20 : 10, 21: 10, 22: 10, 23: 10};
+			
+			var baseMaps;
+			
+			var hashes;
+			
+			var geojs = [];
+			
             // Creating a map object
-            var map = new L.map('osmap', mapOptions);
+            var map = new L.map('map', mapOptions);
 
             // Add circuit lines
             for(var key in polydata) {
@@ -245,12 +303,181 @@ class OpenStreetMap extends Common_functions {
             };
 
             // Add location markers
-            geoJSON = L.geoJSON(geodata, geoJSONOptions).addTo(map);
+            var geoJSON = L.geoJSON(geodata, geoJSONOptions);//.addTo(map);
             map.fitBounds(geoJSON.getBounds());
+			
+			// Add marker points to map
+			loadmarkers(map);
+			
+			// Add default layers
+			mapInitTitleLayers(map);
+			
+			// Add custom tile layers located in server's folder
+			addlayers(map,folders);
+			
+			map.on('contextmenu', function (e) { $("#osmapData").html("Lat, Lon : " + e.latlng.lat.toFixed(8) + ", " + e.latlng.lng.toFixed(8)); });
 
-            // Add Tile layer
-            var layer = new L.TileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', layerOptions);
-            map.addLayer(layer);
+			map.on('zoomstart', function() {
+				//delete markers due to new zoom level
+				for(geoj of geojs){geoj.remove();}
+			});
+			map.on('zoomend', function() {
+				//add markers due to new zoom level
+				loadmarkers(map);
+			});
+			map.on('popupopen', function(e){
+				var popup = document.querySelectorAll('.leaflet-popup-content');
+				var style = e.target._popup._contentNode.style;
+				popup.forEach( item => {
+					if(e.target._popup._contentNode.getBoundingClientRect().height > 260){
+						item.classList.add('custom-scrollbar');
+					}
+				});
+				
+				// TO-DO : Animate scrollbar
+				//e.target._popup._contentNode.addEventListener('mouseenter', function (e){
+					//e.target._popup._contentNode.classList.add('.custom-scrollbar:hover');
+				//});
+				
+				style = "width: "+style.width+";"+"max-height: 260px;";
+				e.target._popup._contentNode.style = style;
+				map.panTo(new L.LatLng(e.popup._latlng.lat+e.popup._latlng.lat*0.00001,e.popup._latlng.lng));
+			});
+			
+			function loadmarkers(map){
+				// Clean previous geodata
+				geodata = [];
+				this.geoJSON.remove();
+				// Local grouping variables
+				hashes = [];
+				geojs = [];
+				var ghash;
+				// Grouping points by GHASH
+				geopoints.forEach( point => {
+					ghash = encodeGeoHash(point.geometry.coordinates[0], point.geometry.coordinates[1]);
+					ghash = ghash.substr(0,ZOOMLEVELS[map.getZoom()]);
+					if(!(ghash in hashes)){
+						hashes[ghash] = [{
+							name: point.properties.name,
+							popup: point.properties.popupContent,
+							lat: point.geometry.coordinates[1],
+							long: point.geometry.coordinates[0]
+						}];
+					}else {
+						hashes[ghash].push({
+							name: point.properties.name,
+							popup: point.properties.popupContent,
+							lat: point.geometry.coordinates[1],
+							long: point.geometry.coordinates[0]
+						});
+					}
+				});
+				
+				// Setting new GeoJson data to display on zoom end
+				for(hash in hashes){
+					var len = hashes[hash].length;
+					var bindpopup = '';
+					var avg_lat = 0;
+					var avg_long = 0;
+					for(point of hashes[hash]){
+						if(len > 1){
+							avg_lat += parseFloat(point.lat) - 0.00013168;
+							avg_long += parseFloat(point.long ) + 0.00011691;
+							//doesn't show span info in groupal point
+							bindpopup += point.popup.substr(0,point.popup.search("<span"));
+						}else{
+							avg_lat = parseFloat(point.lat) - 0.00013168;
+							avg_long = parseFloat(point.long) + 0.00011691;
+							bindpopup += point.popup;
+						}
+					}
+					var tpoint = {
+						"type": "Feature",
+						"properties": {
+							"name": ((len > 1 ) ? hash : hashes[hash].name),
+							"popupContent": bindpopup
+						},
+						"geometry": {
+							"type": "Point",
+							"coordinates": [String((avg_long/len).toFixed(8)),String((avg_lat/len).toFixed(8))]
+						}
+					};
+					let tgeopoint = L.geoJSON(tpoint, {
+						style: osm_style,
+						onEachFeature: osm_onEachFeature,
+						pointToLayer: function (feature, latlng) {
+							return new L.CircleMarker(latlng, {
+								radius: ((len < 2) ? 8 : len*1.2 + 8) ,
+								fillColor: hsl_col_perc(hashes[hash].length*100/geopoints.length),
+								color: "#000",
+								weight: 1,
+								opacity: 0.6,
+								fillOpacity: 0.6
+							});
+						}
+					}).addTo(map);
+					geojs.push(tgeopoint);
+				}
+			}
+			
+			function addlayers(map, folders){
+				var layers = {};
+				folders.forEach(folder => {
+					var layer = L.tileLayer('./app/tools/locations/'+folder+'/{z}/{x}/{y}.png', geoJSONOptions);
+					if(!(layer in layers)){
+						layers[folder] = layer;
+					}else{
+						layers[folder].push(layer);
+					}
+				});
+				L.control.layers(baseMaps, layers).addTo(map);
+				var overlayers = document.getElementsByClassName("leaflet-control-layers-overlays");
+				overlayers = Array.prototype.slice.call(overlayers);
+				var i = 0;
+				folders.forEach(folder => {
+					var slider_input = '<div><input style="width:100px" id="slider_'+folder+'" type="range" min="0" max="1" step="0.1" value="1">';
+					var index_selector = '<div style="color: black !important">Z-Index: <input style="margin-top:5px;margin-left:15px;width:35px; border-radius: 6px;" id="zindex_'+folder+'" class="quantity" min="0" name="quantity" value="'+layers[folder].options.zIndex+'" type="number"/></div></div>';
+					overlayers[0].childNodes[i].childNodes[0].appendChild(document.createRange().createContextualFragment(slider_input+index_selector));
+					var slider = document.getElementById('slider_'+folder+'');
+					slider.addEventListener('input', function (e){
+						layers[folder].setOpacity(slider.value);
+					});
+					var index_input = document.getElementById('zindex_'+folder+'');
+					index_input.addEventListener('input', function (e){
+						layers[folder].setZIndex(index_input.value);
+					});
+					i++;
+				});
+			}
+			
+			function mapInitTitleLayers(map){
+				var osm = new L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', layerOptions).addTo(map);
+				var opentopomap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+					maxZoom: 17,
+					attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+				});//.addTo(map);
+				baseMaps = { "OSM": osm, "Topo": opentopomap };
+			}
+			
+			function hsl_col_perc(percent, start = 40, end = 0) {
+				var a = percent / 100,
+					b = (end - start) * a,
+					c = b + start;
+
+				// Return a CSS HSL string
+				return hslToHex(c);
+				//return 'hsl('+c+', 100%, 50%)';
+			}
+			function hslToHex(h,s=100,l=50){
+				l /= 100;
+				const a = s * Math.min(l, 1 - l) / 100;
+				const f = n => {
+					const k = (n + h / 30) % 12;
+					const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+					return Math.round(255 * color).toString(16).padStart(2, '0');   // convert to Hex and prefix "0" if needed
+				};
+				return `#${f(0)}${f(8)}${f(4)}`;
+			}
         </script>
         <?php
     }

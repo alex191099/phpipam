@@ -38,7 +38,7 @@ foreach ($devices_used as $d) {
     try {
         $res = $Snmp->get_query("get_routing_table");
         // remove those not in subnet
-        if (sizeof($res)>0) {
+        if (sizeof($res)>0 && (explode(".",$d->ip_addr)[1] == explode(".",$_SESSION['device'])[1])) {
            // save for debug
            $debug[$d->hostname][$q] = $res;
 
@@ -94,23 +94,27 @@ else {
 
                     print "<tbody id=device-$deviceid>";
                 	foreach ($query_result as $ip) {
-                    	//get bitmask
-                    	foreach ($masks as $k=>$m) {
-                        	if ($m->netmask == $ip['mask']) {
-                            	$ip['bitmask']=$k;
-                            	break;
-                        	}
-                    	}
-                        print "<tr>";
-                		//ip
-                		print "<td>$ip[subnet]</td>";
-                		print "<td>$ip[mask]</td>";
-                		print "<td>$ip[bitmask]</td>";
-                		//select button
-                		print 	"<td><a href='' class='btn btn-xs btn-success select-snmp-subnet' data-subnet='$ip[subnet]' data-mask='$ip[bitmask]'><i class='fa fa-check'></i> "._('Select')."</a></td>";
-                		print "</tr>";
-
-                		$m++;
+						
+						if(explode(".",$ip[subnet])[1] == explode(".",$_SESSION['device'])[1]){
+							//get bitmask
+							foreach ($masks as $k=>$m) {
+								if ($m->netmask == $ip['mask']) {
+									$ip['bitmask']=$k;
+									break;
+								}
+							}
+							print "<tr>";
+							//ip
+							print "<td>$ip[subnet]</td>";
+							print "<td>$ip[mask]</td>";
+							print "<td>$ip[bitmask]</td>";
+							//select button
+							print 	"<td><a href='' class='btn btn-xs btn-success select-snmp-subnet' data-subnet='$ip[subnet]' data-mask='$ip[bitmask]'><i class='fa fa-check'></i> "._('Select')."</a></td>";
+							print "</tr>";
+	
+							$m++;
+						}
+                    	
                     }
                     print "</tbody>";
                 }

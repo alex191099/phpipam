@@ -53,7 +53,7 @@ if ($devices_used_arp !== false) {
         // get possible sections
         $permitted_sections = explode(";", $d->sections);
         // check
-        if (in_array($subnet->sectionId, $permitted_sections)) {
+		if (in_array($subnet->sectionId, $permitted_sections) && (explode(".",$d->ip_addr)[1] == explode(".",$subnet->ip)[1])) {
             $permitted_devices_arp[] = $d;
         }
     }
@@ -64,7 +64,7 @@ if ($devices_used_mac !== false) {
         // get possible sections
         $permitted_sections = explode(";", $d->sections);
         // check
-        if (in_array($subnet->sectionId, $permitted_sections)) {
+		if (in_array($subnet->sectionId, $permitted_sections) && (explode(".",$d->ip_addr)[1] == explode(".",$subnet->ip)[1])) {
             $permitted_devices_mac[] = $d;
         }
     }
@@ -87,21 +87,38 @@ foreach ($permitted_devices_arp as $d) {
            // save for debug
            $debug[$d->hostname]["get_arp_table"] = $res;
            // check
-           foreach ($res as $kr=>$r) {
-               // if is inside subnet
-               if ($Subnets->is_subnet_inside_subnet ($r['ip']."/32", $Subnets->transform_address($subnet->subnet, "dotted")."/".$subnet->mask)===false) { }
-               // check if host already exists, than remove it
-               elseif (in_array($r['ip'], $subnet_ip_addresses)) { }
-               // save
-               else {
-                   $found_arp[] = $r;
+		   foreach($res as $kr){
+               foreach ($kr as $r) {
+                   // if is inside subnet
+                   if ($Subnets->is_subnet_inside_subnet ($r['ip']."/32", $Subnets->transform_address($subnet->subnet, "dotted")."/".$subnet->mask)===false) { }
+                   // check if host already exists, than remove it
+                   elseif (in_array($r['ip'], $subnet_ip_addresses)) { }
+                   // save
+                   else {
+                       $found_arp[] = $r;
+                   }
                }
-           }
+			}
         }
     } catch (Exception $e) {
        // save for debug
        $debug[$d->hostname]['get_arp_table'] = $res;
        $errors[] = $e->getMessage();
+	}
+}
+
+
+#delete duplicates
+$repeated = [];
+foreach($found_arp as $f){
+	foreach($f as $r){
+		$tmpip = $r['ip'];
+		if(in_array($r['ip'],$repeated)){
+			unset($found_arp[$d->id][$indx]);
+		}else {
+			array_push($repeated,$r['ip']);
+		}
+		$indx ++;
 	}
 }
 
