@@ -291,6 +291,10 @@ $('table.nopagination')
 $('table.sortable')
                  .attr('data-sortable', 'true')
 
+ $('table.25tall')
+                 .attr('data-page-size', '25')
+                 .attr('data-page-list', '[25,50,100,250,500,All]')
+
 // tooltips, popovers
 $('table.sorted').on('all.bs.table', function () {
     if ($("[rel=tooltip]").length) { $("[rel=tooltip]").tooltip(); }
@@ -1183,13 +1187,8 @@ $('form#cform').submit(function () {
 /* changePassRequired */
 $('form#changePassRequiredForm').submit(function() {
 	showSpinner();
-
-    //get username
-    var ipampassword1 = $('#ipampassword1', this).val();
-    var ipampassword2 = $('#ipampassword2', this).val();
-    //get login data
-    var postData = "ipampassword1="+ipampassword1+"&ipampassword2="+ipampassword2;
-
+    //get csrf_cookie, old + new passwords
+    var postData = $('form#changePassRequiredForm').serialize();
     $.post('app/tools/pass-change/result.php', postData, function(data) {
         $('div#changePassRequiredResult').html(data).fadeIn('fast');
         hideSpinner();
